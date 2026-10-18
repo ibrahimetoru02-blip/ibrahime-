@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Website editor — StevePics Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="page-admin">
+    <header>
+      <nav class="nav container" aria-label="Primary navigation">
+        <a class="brand" href="index.html">
+          <img src="stevePics studio lira logo.png" alt="StevePics Studio logo" class="logo" />StevePics Studio
+        </a>
+        <div class="nav-links">
+          <a href="index.html">View website</a>
+          <a href="admin.html">Booking dashboard</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="admin-main container">
+      <section class="admin-heading">
+        <p class="eyebrow">Content management</p>
+        <h1>Website editor</h1>
+        <p>Update page copy and replace gallery or service images with images or videos. Manage contact details and social links once in Global footer to update every page.</p>
+      </section>
+
+      <section id="cms-login" class="admin-login-panel" aria-labelledby="cms-login-heading">
+        <div class="admin-panel-icon" aria-hidden="true">✦</div>
+        <h2 id="cms-login-heading">Admin sign in</h2>
+        <p>Sign in with the administrator email and password provided by the studio.</p>
+        <form id="cms-login-form" class="admin-login-form">
+          <label for="cms-email">Email</label>
+          <input id="cms-email" name="email" type="email" autocomplete="username" required />
+          <label for="cms-password">Password</label>
+          <input id="cms-password" name="password" type="password" autocomplete="current-password" required />
+          <button class="btn btn-primary" type="submit">Sign in</button>
+          <p id="cms-login-message" class="form-message" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section id="cms-editor" hidden aria-label="Website content">
+        <div class="admin-notice" role="note">
+          Published changes update the live website for every visitor. Use concise text and upload media up to 50 MB.
+        </div>
+        <div class="admin-toolbar">
+          <div>
+            <h2>Site content</h2>
+            <p id="cms-content-count" class="admin-muted">Loading editable content…</p>
+          </div>
+          <div class="admin-toolbar-actions">
+            <label class="admin-page-filter">
+              <span class="visually-hidden">Choose a page</span>
+              <select id="cms-page-filter">
+                <option value="all">All pages</option>
+              </select>
+            </label>
+            <button id="cms-logout" class="btn btn-secondary" type="button">Sign out</button>
+          </div>
+        </div>
+        <p id="cms-editor-message" class="form-message" role="status" aria-live="polite"></p>
+        <div id="cms-editor-error" class="admin-error" role="alert" hidden></div>
+        <div id="cms-fields" class="cms-fields"></div>
+      </section>
+    </main>
+    <footer class="admin-footer">
+      <span>&copy; <span id="year"></span> StevePics Studio</span>
+    </footer>
+    <script src="supabase-config.js"></script>
+    <script src="cms-admin.js"></script>
+  </body>
+</html>
