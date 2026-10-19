@@ -1000,6 +1000,10 @@ h1 {
   background: var(--panel);
 }
 
+.admin-account-panel .admin-login-form[hidden] {
+  display: none;
+}
+
 .admin-account-panel .admin-login-form h2,
 .admin-account-panel .admin-login-form p {
   margin-top: 0;

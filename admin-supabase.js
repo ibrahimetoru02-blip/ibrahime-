@@ -3,6 +3,7 @@
 
   const config = window.STEVEPICS_SUPABASE;
   const SESSION_KEY = "stevepics.cmsSession";
+  const returnToSiteEditor = new URLSearchParams(window.location.search).get("returnTo") === "site-editor.html";
   const statuses = ["new", "contacted", "confirmed", "completed", "cancelled"];
   const loginPanel = document.querySelector("#admin-login");
   const loginForm = document.querySelector("#admin-login-form");
@@ -201,6 +202,10 @@
     try {
       session = normalizeSession(saved);
       await verifyAdminSession();
+      if (returnToSiteEditor) {
+        window.location.replace("site-editor.html");
+        return;
+      }
       await showDashboard();
     } catch (error) {
       console.error("Booking dashboard sign-in check failed:", error);
@@ -238,7 +243,8 @@
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
       loginForm.reset();
       setLoginMessage("");
-      await showDashboard();
+      if (returnToSiteEditor) window.location.replace("site-editor.html");
+      else await showDashboard();
     } catch (error) {
       console.error("Admin dashboard sign-in failed.", error);
       session = null;

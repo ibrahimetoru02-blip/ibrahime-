@@ -13,10 +13,7 @@
     ["booking.html", "Booking"],
   ];
   const GLOBAL_PAGE = "global-footer";
-  const login = document.querySelector("#cms-login");
-  const loginForm = document.querySelector("#cms-login-form");
   const editor = document.querySelector("#cms-editor");
-  const loginMessage = document.querySelector("#cms-login-message");
   const pageFilter = document.querySelector("#cms-page-filter");
   const contentCount = document.querySelector("#cms-content-count");
   const fieldsContainer = document.querySelector("#cms-fields");
@@ -33,6 +30,11 @@
   const apiBase = config?.url?.replace(/\/$/, "");
   const isConfigured = apiBase && config.anonKey &&
     !apiBase.includes("YOUR_PROJECT_ID") && !config.anonKey.includes("YOUR_SUPABASE_ANON_KEY");
+  const redirectToAdmin = () => {
+    const adminUrl = new URL("admin.html", window.location.href);
+    adminUrl.searchParams.set("returnTo", "site-editor.html");
+    window.location.replace(adminUrl);
+  };
 
   const request = async (path, options = {}, useSession = true) => {
     const headers = new Headers(options.headers || {});
@@ -330,13 +332,6 @@
       console.error("Could not restore the content editor session.", error);
       session = null;
       sessionStorage.removeItem(SESSION_KEY);
-      setMessage(
-        loginMessage,
-        error.message === "not-authorized"
-          ? "This account doesn't have access to the website editor."
-          : "We couldn't verify your sign-in. Please sign in again.",
-        "error",
-      );
       return false;
     }
   };
@@ -346,49 +341,8 @@
   }
 
   if (!isConfigured) {
-    setMessage(loginMessage, "Admin sign-in is temporarily unavailable. Please contact the studio for help.", "error");
-    loginForm.querySelector("button[type=submit]").disabled = true;
-  } else {
-    loginForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const formData = new FormData(loginForm);
-      const button = loginForm.querySelector("button[type=submit]");
-      button.disabled = true;
-      setMessage(loginMessage, "Signing in…");
-      try {
-        const response = await fetch(`${apiBase}/auth/v1/token?grant_type=password`, {
-          method: "POST",
-          headers: { apikey: config.anonKey, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: String(formData.get("email") || "").trim(),
-            password: String(formData.get("password") || ""),
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error("sign-in-failed");
-        session = normalizeSession(result);
-        const admins = await request(`/rest/v1/site_admins?select=user_id&user_id=eq.${encodeURIComponent(session.user.id)}`);
-        if (!admins.length) {
-          session = null;
-          throw new Error("not-authorized");
-        }
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-        loginForm.reset();
-        setMessage(loginMessage, "");
-        await showEditor();
-      } catch (error) {
-        session = null;
-        setMessage(
-          loginMessage,
-          error.message === "not-authorized"
-            ? "This account doesn't have access to the website editor."
-            : "We couldn't sign you in. Check your details and try again.",
-          "error",
-        );
-      } finally {
-        button.disabled = false;
-      }
-    });
+    editor.hidden = false;
+    setMessage(editorMessage, "The website editor is temporarily unavailable. Please contact the studio for help.", "error");
   }
 
   pageFilter.addEventListener("change", renderFields);
@@ -400,14 +354,13 @@
     }
     session = null;
     sessionStorage.removeItem(SESSION_KEY);
-    editor.hidden = true;
-    login.hidden = false;
-    setMessage(loginMessage, "You have signed out.", "info");
+    window.location.replace("admin.html");
   });
 
   if (isConfigured) {
     restoreSession().then((restored) => {
       if (restored) showEditor();
+      else redirectToAdmin();
     });
   }
 })();
