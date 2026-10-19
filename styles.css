@@ -1359,8 +1359,8 @@ button:disabled {
 .portfolio-card > video {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
+  aspect-ratio: 210 / 297;
+  object-fit: contain;
   border-radius: 0.7rem;
   background: rgba(0, 0, 0, 0.25);
 }
