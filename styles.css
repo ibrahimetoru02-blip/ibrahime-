@@ -627,6 +627,18 @@ h1 {
   color: #b7cdff;
 }
 
+.booking-followup {
+  margin-top: 0.5rem;
+  color: var(--muted);
+}
+
+.booking-followup a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
 .contact-item {
   display: inline-flex;
   gap: 0.6rem;
@@ -1297,8 +1309,9 @@ h1 {
 
 .cms-media-preview {
   width: 100%;
-  max-height: 230px;
-  object-fit: cover;
+  max-height: none;
+  aspect-ratio: 210 / 297;
+  object-fit: contain;
   border-radius: 0.7rem;
   background: rgba(0, 0, 0, 0.25);
 }
@@ -1319,7 +1332,7 @@ h1 {
 }
 
 button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.65;
 }
 

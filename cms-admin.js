@@ -31,6 +31,22 @@
   let contentRecords = new Map();
   let catalog = [];
   let activePage = PAGES[0][0];
+  const unsavedControls = new Set();
+
+  const trackUnsavedControl = (event) => {
+    const control = event.target;
+    if (editor.contains(control) && control.matches("input, textarea, select")) {
+      unsavedControls.add(control);
+    }
+  };
+  const markControlsSaved = (...controls) => controls.forEach((control) => unsavedControls.delete(control));
+  document.addEventListener("input", trackUnsavedControl);
+  document.addEventListener("change", trackUnsavedControl);
+  window.addEventListener("beforeunload", (event) => {
+    if (!unsavedControls.size) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
 
   document.querySelectorAll("#year").forEach((node) => {
     node.textContent = String(new Date().getFullYear());
@@ -183,6 +199,8 @@
       button.textContent = label;
       button.setAttribute("aria-pressed", String(file === activePage));
       button.addEventListener("click", () => {
+        if (unsavedControls.size && !window.confirm("You have unsaved editor changes. Leave this page section and discard them?")) return;
+        unsavedControls.clear();
         activePage = file;
         renderFields();
       });
@@ -262,6 +280,7 @@
         if (entries.length > 1) await saveContentEntries(entries);
         else await saveContent(item.key, value);
         entries.forEach((entry) => contentRecords.set(entry.key, entry.value));
+        markControlsSaved(control);
         const linkedMessage = item.key === "contact.email" || item.key === "contact.phone"
           ? " Its click-to-contact link was updated automatically."
           : "";
@@ -307,6 +326,7 @@
         const value = { ...current, alt: altInput.value.trim() };
         await saveContent(item.key, value);
         contentRecords.set(item.key, value);
+        markControlsSaved(altInput);
         setMessage(editorMessage, `${item.label} description saved. The existing media file was kept.`, "success");
         renderFields();
       } catch (error) {
@@ -363,6 +383,7 @@
         };
         await saveContent(item.key, value);
         contentRecords.set(item.key, value);
+        markControlsSaved(titleInput, descriptionInput);
         item.value = value;
         item.label = value.title;
         setMessage(editorMessage, `${value.title} description saved. The media file was kept.`, "success");
@@ -396,13 +417,18 @@
     const replaceButton = document.createElement("button");
     replaceButton.type = "button";
     replaceButton.className = "btn btn-secondary cms-save-button";
-    replaceButton.textContent = "Replace existing photo/video";
-    replaceButton.disabled = true;
+    replaceButton.textContent = "Choose photo/video to replace";
     fileInput.addEventListener("change", () => {
-      replaceButton.disabled = !fileInput.files?.[0];
+      replaceButton.textContent = fileInput.files?.[0]
+        ? "Replace existing photo/video"
+        : "Choose photo/video to replace";
     });
     replaceButton.addEventListener("click", async () => {
       const file = fileInput.files?.[0];
+      if (!file) {
+        fileInput.click();
+        return;
+      }
       const fileError = validateMediaFile(file);
       if (fileError) {
         setMessage(editorMessage, fileError, "error");
@@ -416,6 +442,7 @@
         const value = {
           ...current,
           ...uploaded,
+          hidden: false,
           ...(item.type === "added-media"
             ? { previousMedia: { url: current.url, mediaType: current.mediaType } }
             : {}),
@@ -423,6 +450,7 @@
         await saveContent(item.key, value);
         contentRecords.set(item.key, value);
         if (item.type === "added-media") item.value = value;
+        markControlsSaved(fileInput);
         setMessage(editorMessage, `${item.label} now uses the new file. The previous storage file was kept.`, "success");
         renderFields();
       } catch (error) {
@@ -439,7 +467,7 @@
     const restoreOriginal = item.type === "media";
     restoreButton.textContent = restoreOriginal ? "Restore original image/video" : "Restore previous upload";
     restoreButton.disabled = restoreOriginal
-      ? current.url === item.value.url && current.mediaType === item.value.mediaType && current.alt === item.value.alt
+      ? !current.hidden && current.url === item.value.url && current.mediaType === item.value.mediaType && current.alt === item.value.alt
       : !current.previousMedia?.url;
     restoreButton.addEventListener("click", async () => {
       if (restoreButton.disabled) return;
@@ -464,6 +492,36 @@
       }
     });
     card.append(restoreButton);
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "btn btn-secondary cms-save-button";
+    deleteButton.textContent = "Delete from page";
+    deleteButton.addEventListener("click", async () => {
+      const prompt = item.type === "media"
+        ? `Remove ${item.label} from ${item.pageLabel}? You can restore it later.`
+        : `Delete ${item.label} from ${item.pageLabel}? Its uploaded file will remain in storage.`;
+      if (!window.confirm(prompt)) return;
+      deleteButton.disabled = true;
+      setMessage(editorMessage, `Removing ${item.label} from the page…`);
+      try {
+        if (item.type === "media") {
+          const value = { ...current, hidden: true };
+          await saveContent(item.key, value);
+          contentRecords.set(item.key, value);
+        } else {
+          await deleteContent(item.key);
+          contentRecords.delete(item.key);
+          catalog = catalog.filter((entry) => entry.key !== item.key);
+        }
+        setMessage(editorMessage, `${item.label} was removed from ${item.pageLabel}.`, "success");
+        renderFields();
+      } catch (error) {
+        showError(error);
+        deleteButton.disabled = false;
+      }
+    });
+    card.append(deleteButton);
   }
 
   function validateMediaFile(file) {
@@ -503,6 +561,14 @@
       method: "POST",
       headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify(entries),
+    });
+  }
+
+  async function deleteContent(key) {
+    const query = new URLSearchParams({ key: `eq.${key}` });
+    await request(`/rest/v1/site_content?${query}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
     });
   }
 
@@ -551,6 +617,8 @@
     }
   });
   contactToggle.addEventListener("click", () => {
+    if (unsavedControls.size && !window.confirm("You have unsaved editor changes. Discard them and open contact information?")) return;
+    unsavedControls.clear();
     activePage = GLOBAL_PAGE;
     addMediaForm.hidden = true;
     addMediaToggle.setAttribute("aria-expanded", "false");
@@ -582,6 +650,7 @@
       };
       await saveContent(key, value);
       contentRecords.set(key, value);
+      markControlsSaved(addMediaPage, addMediaFile, addMediaTitle, addMediaDescription);
       catalog.push({
         key,
         label: value.title,
@@ -608,6 +677,7 @@
       .filter((item) => {
         const current = contentRecords.get(item.key);
         return current && (
+          current.hidden ||
           current.url !== item.value.url ||
           current.mediaType !== item.value.mediaType ||
           current.alt !== item.value.alt

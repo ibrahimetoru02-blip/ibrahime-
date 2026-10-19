@@ -36,6 +36,7 @@
   const bookingForm = document.querySelector("#booking-form");
   if (bookingForm instanceof HTMLFormElement) {
     const message = document.querySelector("#booking-message");
+    const bookingFollowup = document.querySelector("#booking-followup");
     const saveDraft = () => {
       const draft = {};
       new FormData(bookingForm).forEach((value, name) => {
@@ -77,11 +78,16 @@
       }
     }
 
-    bookingForm.addEventListener("input", saveDraft);
-    bookingForm.addEventListener("change", saveDraft);
+    const saveDraftAfterEdit = () => {
+      if (bookingFollowup) bookingFollowup.hidden = true;
+      saveDraft();
+    };
+    bookingForm.addEventListener("input", saveDraftAfterEdit);
+    bookingForm.addEventListener("change", saveDraftAfterEdit);
     bookingForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!bookingForm.reportValidity()) return;
+      if (bookingFollowup) bookingFollowup.hidden = true;
 
       const config = window.STEVEPICS_SUPABASE;
       const message = document.querySelector("#booking-message");
@@ -138,6 +144,7 @@
           message.textContent = "Thank you! Your booking request was sent to StevePics Studio.";
           message.className = "form-message success";
         }
+        if (bookingFollowup) bookingFollowup.hidden = false;
       } catch (error) {
         console.error("Unable to send booking request to Supabase.", error);
         if (message) {

@@ -10,6 +10,12 @@
     if (!media || typeof media.url !== "string" || !["image", "video"].includes(media.mediaType)) {
       return;
     }
+    if (media.hidden) {
+      const portfolioCard = element.closest("figure.portfolio-card");
+      if (portfolioCard) portfolioCard.remove();
+      else element.remove();
+      return;
+    }
     let url;
     try {
       url = new URL(media.url, window.location.href);
@@ -40,7 +46,7 @@
 
   const renderAddedMedia = (records, page) => {
     const additions = records.filter((record) =>
-      record.key.startsWith("page-media.") && record.value?.page === page,
+      record.key.startsWith("page-media.") && record.value?.page === page && !record.value?.hidden,
     );
     if (!additions.length) return;
 
