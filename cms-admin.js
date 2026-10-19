@@ -14,7 +14,14 @@
   ];
   const GLOBAL_PAGE = "global-footer";
   const editor = document.querySelector("#cms-editor");
-  const pageFilter = document.querySelector("#cms-page-filter");
+  const pageButtons = document.querySelector("#cms-page-buttons");
+  const addMediaToggle = document.querySelector("#cms-add-media-toggle");
+  const contactToggle = document.querySelector("#cms-contact-toggle");
+  const addMediaForm = document.querySelector("#cms-add-media-form");
+  const addMediaPage = document.querySelector("#cms-add-media-page");
+  const addMediaFile = document.querySelector("#cms-add-media-file");
+  const addMediaTitle = document.querySelector("#cms-add-media-title");
+  const addMediaDescription = document.querySelector("#cms-add-media-description");
   const contentCount = document.querySelector("#cms-content-count");
   const fieldsContainer = document.querySelector("#cms-fields");
   const editorMessage = document.querySelector("#cms-editor-message");
@@ -22,6 +29,7 @@
   let session = null;
   let contentRecords = new Map();
   let catalog = [];
+  let activePage = PAGES[0][0];
 
   document.querySelectorAll("#year").forEach((node) => {
     node.textContent = String(new Date().getFullYear());
@@ -62,15 +70,25 @@
   };
 
   const showEditor = async () => {
-    login.hidden = true;
     editor.hidden = false;
     if (!catalog.length) {
       setMessage(editorMessage, "Loading editable website content…");
       try {
-        catalog = await loadCatalog();
+        const pageCatalog = await loadCatalog();
         const records = await request("/rest/v1/site_content?select=key,value");
         contentRecords = new Map(records.map((record) => [record.key, record.value]));
-        renderPageOptions();
+        const addedMedia = records
+          .filter((record) => record.key.startsWith("page-media.") && record.value?.page && record.value?.url)
+          .map((record) => ({
+            key: record.key,
+            label: record.value.title || "Added media",
+            page: record.value.page,
+            pageLabel: PAGES.find(([file]) => file === record.value.page)?.[1] || record.value.page,
+            type: "added-media",
+            value: record.value,
+          }));
+        catalog = [...pageCatalog, ...addedMedia];
+        renderPageButtons();
         renderFields();
         setMessage(editorMessage, "");
       } catch (error) {
@@ -82,7 +100,12 @@
   const showError = (error) => {
     console.error("Website editor operation failed.", error);
     if (editorError) {
-      editorError.textContent = error.message === "Use an HTTPS, mailto:, or tel: link."
+      const validationMessages = [
+        "Use an HTTPS, mailto:, or tel: link.",
+        "Enter a valid contact email address.",
+        "Enter a valid phone number with its country code, or a local number beginning with 0.",
+      ];
+      editorError.textContent = validationMessages.includes(error.message)
         ? error.message
         : "We couldn't complete that update. Please try again.";
       editorError.hidden = false;
@@ -150,23 +173,31 @@
     });
   }
 
-  function renderPageOptions() {
-    const globalOption = document.createElement("option");
-    globalOption.value = GLOBAL_PAGE;
-    globalOption.textContent = "Global footer";
-    pageFilter.append(globalOption);
-    PAGES.forEach(([file, label]) => {
-      const option = document.createElement("option");
-      option.value = file;
-      option.textContent = label;
-      pageFilter.append(option);
+  function renderPageButtons() {
+    pageButtons.replaceChildren();
+    [...PAGES, [GLOBAL_PAGE, "Contact & footer"]].forEach(([file, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "cms-page-button";
+      button.textContent = label;
+      button.setAttribute("aria-pressed", String(file === activePage));
+      button.addEventListener("click", () => {
+        activePage = file;
+        renderFields();
+      });
+      pageButtons.append(button);
     });
   }
 
   function renderFields() {
     fieldsContainer.replaceChildren();
-    const page = pageFilter.value;
-    const filtered = catalog.filter((item) => page === "all" || item.page === page);
+    const filtered = catalog.filter((item) => item.page === activePage);
+    pageButtons.querySelectorAll(".cms-page-button").forEach((button, index) => {
+      const [file] = [...PAGES, [GLOBAL_PAGE, "Contact & footer"]][index];
+      button.setAttribute("aria-pressed", String(file === activePage));
+    });
+    contactToggle.setAttribute("aria-pressed", String(activePage === GLOBAL_PAGE));
+    addMediaToggle.hidden = activePage === GLOBAL_PAGE;
     if (contentCount) {
       contentCount.textContent = `${filtered.length} editable item${filtered.length === 1 ? "" : "s"}`;
     }
@@ -181,6 +212,8 @@
       card.append(title, pageName);
       if (item.type === "media") {
         renderMediaField(card, item);
+      } else if (item.type === "added-media") {
+        renderAddedMediaField(card, item);
       } else {
         renderTextField(card, item);
       }
@@ -207,12 +240,31 @@
       save.disabled = true;
       setMessage(editorMessage, `Saving ${item.label}…`);
       try {
+        const value = control.value.trim();
         if (item.type === "link" && !/^(https:\/\/|mailto:|tel:)/i.test(control.value.trim())) {
           throw new Error("Use an HTTPS, mailto:, or tel: link.");
         }
-        await saveContent(item.key, control.value);
-        contentRecords.set(item.key, control.value);
-        setMessage(editorMessage, `${item.label} saved. The live site will use the updated text.`, "success");
+        const entries = [{ key: item.key, value }];
+        if (item.key === "contact.email") {
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+            throw new Error("Enter a valid contact email address.");
+          }
+          entries.push({ key: "contact.email.href", value: `mailto:${value}` });
+        } else if (item.key === "contact.phone") {
+          let phoneDigits = value.replace(/\D/g, "");
+          if (phoneDigits.startsWith("0")) phoneDigits = `256${phoneDigits.slice(1)}`;
+          if (phoneDigits.length < 8 || phoneDigits.length > 15) {
+            throw new Error("Enter a valid phone number with its country code, or a local number beginning with 0.");
+          }
+          entries.push({ key: "contact.whatsapp.href", value: `https://wa.me/${phoneDigits}` });
+        }
+        if (entries.length > 1) await saveContentEntries(entries);
+        else await saveContent(item.key, value);
+        entries.forEach((entry) => contentRecords.set(entry.key, entry.value));
+        const linkedMessage = item.key === "contact.email" || item.key === "contact.phone"
+          ? " Its click-to-contact link was updated automatically."
+          : "";
+        setMessage(editorMessage, `${item.label} saved.${linkedMessage} The live site will use the updated text.`, "success");
       } catch (error) {
         showError(error);
       } finally {
@@ -243,54 +295,18 @@
     altInput.className = "cms-alt-input";
     altInput.value = current.alt || "";
     altInput.setAttribute("aria-label", `${item.label} description`);
-    const fileLabel = document.createElement("label");
-    fileLabel.className = "cms-input-label";
-    fileLabel.textContent = "Choose replacement image or video";
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm";
-    fileInput.className = "cms-file-input";
-    fileInput.setAttribute("aria-label", `Choose replacement for ${item.label}`);
     const save = document.createElement("button");
     save.type = "button";
     save.className = "btn btn-primary cms-save-button";
-    save.textContent = "Save media";
+    save.textContent = "Save description";
     save.addEventListener("click", async () => {
-      const file = fileInput.files?.[0];
-      if (!file && !current.url) {
-        setMessage(editorMessage, "Choose an image or video before saving.", "error");
-        return;
-      }
-      if (file && file.size > 50 * 1024 * 1024) {
-        setMessage(editorMessage, "Choose a file smaller than 50 MB.", "error");
-        return;
-      }
-      if (file && !["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"].includes(file.type)) {
-        setMessage(editorMessage, "Choose a JPG, PNG, WebP, GIF, MP4, or WebM file.", "error");
-        return;
-      }
       save.disabled = true;
-      setMessage(editorMessage, `Saving ${item.label}…`);
+      setMessage(editorMessage, `Saving the description for ${item.label}…`);
       try {
-        let url = current.url;
-        let mediaType = current.mediaType;
-        if (file) {
-          mediaType = file.type.startsWith("video/") ? "video" : "image";
-          const filename = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-          const objectPath = `${item.key}/${Date.now()}-${filename}`;
-          const path = objectPath.split("/").map(encodeURIComponent).join("/");
-          const result = await request(`/storage/v1/object/${config.mediaBucket}/${path}`, {
-            method: "POST",
-            headers: { "Content-Type": file.type, "x-upsert": "false" },
-            body: file,
-          });
-          void result;
-          url = `${apiBase}/storage/v1/object/public/${config.mediaBucket}/${path}`;
-        }
-        const value = { url, mediaType, alt: altInput.value.trim() };
+        const value = { ...current, alt: altInput.value.trim() };
         await saveContent(item.key, value);
         contentRecords.set(item.key, value);
-        setMessage(editorMessage, `${item.label} saved. The live site will use the updated media.`, "success");
+        setMessage(editorMessage, `${item.label} description saved. The existing media file was kept.`, "success");
         renderFields();
       } catch (error) {
         showError(error);
@@ -298,7 +314,94 @@
         save.disabled = false;
       }
     });
-    card.append(preview, altLabel, altInput, fileLabel, fileInput, save);
+    card.append(preview, altLabel, altInput, save);
+  }
+
+  function renderAddedMediaField(card, item) {
+    const current = contentRecords.get(item.key) || item.value;
+    const preview = document.createElement(current.mediaType === "video" ? "video" : "img");
+    preview.className = "cms-media-preview";
+    preview.src = new URL(current.url, window.location.href).href;
+    if (current.mediaType === "video") {
+      preview.controls = true;
+      preview.playsInline = true;
+    } else {
+      preview.alt = current.description || "";
+    }
+
+    const titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.maxLength = 120;
+    titleInput.className = "cms-text-input";
+    titleInput.value = current.title || "";
+    titleInput.setAttribute("aria-label", `${item.label} title`);
+    const descriptionInput = document.createElement("textarea");
+    descriptionInput.rows = 3;
+    descriptionInput.maxLength = 500;
+    descriptionInput.className = "cms-text-input";
+    descriptionInput.value = current.description || "";
+    descriptionInput.setAttribute("aria-label", `${item.label} description`);
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "btn btn-primary cms-save-button";
+    save.textContent = "Save title and description";
+    save.addEventListener("click", async () => {
+      if (!titleInput.value.trim() || !descriptionInput.value.trim()) {
+        setMessage(editorMessage, "Enter a title and description before saving.", "error");
+        return;
+      }
+      save.disabled = true;
+      setMessage(editorMessage, `Saving ${titleInput.value.trim()}…`);
+      try {
+        const value = {
+          ...current,
+          title: titleInput.value.trim(),
+          description: descriptionInput.value.trim(),
+          alt: descriptionInput.value.trim(),
+        };
+        await saveContent(item.key, value);
+        contentRecords.set(item.key, value);
+        item.value = value;
+        item.label = value.title;
+        setMessage(editorMessage, `${value.title} description saved. The media file was kept.`, "success");
+        renderFields();
+      } catch (error) {
+        showError(error);
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    const titleLabel = document.createElement("label");
+    titleLabel.className = "cms-input-label";
+    titleLabel.textContent = "Title";
+    const descriptionLabel = document.createElement("label");
+    descriptionLabel.className = "cms-input-label";
+    descriptionLabel.textContent = "Image or video description";
+    card.append(preview, titleLabel, titleInput, descriptionLabel, descriptionInput, save);
+  }
+
+  function validateMediaFile(file) {
+    if (!file) return "Choose an image or video file.";
+    if (file.size > 50 * 1024 * 1024) return "Choose a file smaller than 50 MB.";
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"].includes(file.type)) {
+      return "Choose a JPG, PNG, WebP, GIF, MP4, or WebM file.";
+    }
+    return "";
+  }
+
+  async function uploadMediaFile(file, key) {
+    const mediaType = file.type.startsWith("video/") ? "video" : "image";
+    const filename = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const safeKey = key.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const objectPath = `site-content/${safeKey}/${Date.now()}-${filename}`;
+    const path = objectPath.split("/").map(encodeURIComponent).join("/");
+    await request(`/storage/v1/object/${config.mediaBucket}/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": file.type, "x-upsert": "false" },
+      body: file,
+    });
+    return { url: `${apiBase}/storage/v1/object/public/${config.mediaBucket}/${path}`, mediaType };
   }
 
   async function saveContent(key, value) {
@@ -306,6 +409,14 @@
       method: "POST",
       headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify({ key, value }),
+    });
+  }
+
+  async function saveContentEntries(entries) {
+    await request("/rest/v1/site_content?on_conflict=key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(entries),
     });
   }
 
@@ -345,7 +456,66 @@
     setMessage(editorMessage, "The website editor is temporarily unavailable. Please contact the studio for help.", "error");
   }
 
-  pageFilter.addEventListener("change", renderFields);
+  addMediaToggle.addEventListener("click", () => {
+    addMediaForm.hidden = !addMediaForm.hidden;
+    addMediaToggle.setAttribute("aria-expanded", String(!addMediaForm.hidden));
+    if (!addMediaForm.hidden) {
+      addMediaPage.value = PAGES.some(([file]) => file === activePage) ? activePage : "";
+      addMediaPage.focus();
+    }
+  });
+  contactToggle.addEventListener("click", () => {
+    activePage = GLOBAL_PAGE;
+    addMediaForm.hidden = true;
+    addMediaToggle.setAttribute("aria-expanded", "false");
+    renderFields();
+    fieldsContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  addMediaForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!addMediaForm.reportValidity()) return;
+    const file = addMediaFile.files?.[0];
+    const fileError = validateMediaFile(file);
+    if (fileError) {
+      setMessage(editorMessage, fileError, "error");
+      return;
+    }
+    const submit = addMediaForm.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    setMessage(editorMessage, `Uploading ${addMediaTitle.value.trim()}…`);
+    try {
+      const uniqueId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const key = `page-media.${uniqueId}`;
+      const uploaded = await uploadMediaFile(file, key);
+      const value = {
+        page: addMediaPage.value,
+        title: addMediaTitle.value.trim(),
+        description: addMediaDescription.value.trim(),
+        alt: addMediaDescription.value.trim(),
+        ...uploaded,
+      };
+      await saveContent(key, value);
+      contentRecords.set(key, value);
+      catalog.push({
+        key,
+        label: value.title,
+        page: value.page,
+        pageLabel: PAGES.find(([file]) => file === value.page)?.[1] || value.page,
+        type: "added-media",
+        value,
+      });
+      activePage = value.page;
+      addMediaForm.reset();
+      addMediaForm.hidden = true;
+      addMediaToggle.setAttribute("aria-expanded", "false");
+      renderFields();
+      setMessage(editorMessage, `${value.title} added to ${PAGES.find(([file]) => file === value.page)?.[1] || value.page}.`, "success");
+    } catch (error) {
+      showError(error);
+    } finally {
+      submit.disabled = false;
+    }
+  });
   document.querySelector("#cms-logout").addEventListener("click", async () => {
     try {
       await request("/auth/v1/logout", { method: "POST" });

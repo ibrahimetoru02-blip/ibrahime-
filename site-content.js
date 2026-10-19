@@ -38,6 +38,67 @@
     element.replaceWith(replacement);
   };
 
+  const renderAddedMedia = (records, page) => {
+    const additions = records.filter((record) =>
+      record.key.startsWith("page-media.") && record.value?.page === page,
+    );
+    if (!additions.length) return;
+
+    let targetGrid = document.querySelector(".portfolio-grid");
+    if (!targetGrid) {
+      const main = document.querySelector("main");
+      if (!main) return;
+      const section = document.createElement("section");
+      section.className = "section container cms-added-media-section";
+      const heading = document.createElement("div");
+      heading.className = "section-heading";
+      const eyebrow = document.createElement("p");
+      eyebrow.className = "eyebrow";
+      eyebrow.textContent = "More from the studio";
+      const title = document.createElement("h2");
+      title.textContent = "Featured work";
+      heading.append(eyebrow, title);
+      targetGrid = document.createElement("div");
+      targetGrid.className = "portfolio-grid";
+      section.append(heading, targetGrid);
+      main.append(section);
+    }
+
+    additions.forEach(({ key, value }) => {
+      if (targetGrid.querySelector(`[data-cms-added-media="${CSS.escape(key)}"]`)) return;
+      let url;
+      try {
+        url = new URL(value.url, window.location.href);
+      } catch (error) {
+        console.error("Invalid added site media URL.", error);
+        return;
+      }
+      if (!["http:", "https:"].includes(url.protocol) || !["image", "video"].includes(value.mediaType)) return;
+
+      const card = document.createElement("figure");
+      card.className = "portfolio-card";
+      card.dataset.cmsAddedMedia = key;
+      const media = document.createElement(value.mediaType === "video" ? "video" : "img");
+      media.src = url.href;
+      if (value.mediaType === "video") {
+        media.controls = true;
+        media.playsInline = true;
+        media.setAttribute("aria-label", value.description || value.title || "Studio video");
+      } else {
+        media.alt = value.description || "";
+        media.loading = "lazy";
+      }
+      const caption = document.createElement("figcaption");
+      const captionTitle = document.createElement("strong");
+      captionTitle.textContent = value.title || "Studio media";
+      const description = document.createElement("div");
+      description.textContent = value.description || "";
+      caption.append(captionTitle, description);
+      card.append(media, caption);
+      targetGrid.append(card);
+    });
+  };
+
   const loadSiteContent = async () => {
     const response = await fetch(
       `${config.url.replace(/\/$/, "")}/rest/v1/site_content?select=key,value`,
@@ -71,6 +132,9 @@
         element.href = value;
       }
     });
+
+    const page = window.location.pathname.split("/").pop() || "index.html";
+    renderAddedMedia(records, page);
   };
 
   loadSiteContent().catch((error) => {

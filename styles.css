@@ -973,6 +973,10 @@ h1 {
   margin-top: 1rem;
 }
 
+.admin-home-link {
+  margin-top: 1rem;
+}
+
 .admin-notice {
   padding: 1rem 1.2rem;
   margin-bottom: 1.5rem;
@@ -1193,14 +1197,57 @@ h1 {
   color: #c8c1ff;
 }
 
-.admin-page-filter select {
-  min-width: 150px;
-  padding: 0.75rem 0.9rem;
+.cms-page-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 0 0 1.25rem;
+}
+
+.cms-page-button {
+  min-height: 42px;
+  padding: 0.55rem 0.9rem;
   border: 1px solid var(--border);
-  border-radius: 0.7rem;
-  background: #101c2d;
+  border-radius: 0.65rem;
+  background: transparent;
   color: var(--text);
+  cursor: pointer;
   font: inherit;
+}
+
+.cms-page-button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #111;
+}
+
+.cms-page-actions {
+  margin-bottom: 1rem;
+}
+
+.cms-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.cms-add-media-form {
+  display: grid;
+  max-width: 720px;
+  gap: 0.75rem;
+  padding: 1.2rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--panel);
+}
+
+.cms-add-media-form[hidden] {
+  display: none;
+}
+
+.cms-add-media-form h3 {
+  margin: 0 0 0.25rem;
 }
 
 .cms-fields {
@@ -1306,4 +1353,14 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+}
+
+.portfolio-card > img,
+.portfolio-card > video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 0.7rem;
+  background: rgba(0, 0, 0, 0.25);
 }
