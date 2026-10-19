@@ -17,6 +17,7 @@
   const pageButtons = document.querySelector("#cms-page-buttons");
   const addMediaToggle = document.querySelector("#cms-add-media-toggle");
   const contactToggle = document.querySelector("#cms-contact-toggle");
+  const restoreOriginalMediaButton = document.querySelector("#cms-restore-original-media");
   const addMediaForm = document.querySelector("#cms-add-media-form");
   const addMediaPage = document.querySelector("#cms-add-media-page");
   const addMediaFile = document.querySelector("#cms-add-media-file");
@@ -315,6 +316,7 @@
       }
     });
     card.append(preview, altLabel, altInput, save);
+    renderMediaReplacementControls(card, item, current);
   }
 
   function renderAddedMediaField(card, item) {
@@ -379,6 +381,89 @@
     descriptionLabel.className = "cms-input-label";
     descriptionLabel.textContent = "Image or video description";
     card.append(preview, titleLabel, titleInput, descriptionLabel, descriptionInput, save);
+    renderMediaReplacementControls(card, item, current);
+  }
+
+  function renderMediaReplacementControls(card, item, current) {
+    const fileLabel = document.createElement("label");
+    fileLabel.className = "cms-input-label";
+    fileLabel.textContent = "Choose replacement photo or video";
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm";
+    fileInput.className = "cms-file-input";
+    fileInput.setAttribute("aria-label", `Choose replacement for ${item.label}`);
+    const replaceButton = document.createElement("button");
+    replaceButton.type = "button";
+    replaceButton.className = "btn btn-secondary cms-save-button";
+    replaceButton.textContent = "Replace existing photo/video";
+    replaceButton.disabled = true;
+    fileInput.addEventListener("change", () => {
+      replaceButton.disabled = !fileInput.files?.[0];
+    });
+    replaceButton.addEventListener("click", async () => {
+      const file = fileInput.files?.[0];
+      const fileError = validateMediaFile(file);
+      if (fileError) {
+        setMessage(editorMessage, fileError, "error");
+        return;
+      }
+      replaceButton.disabled = true;
+      setMessage(editorMessage, `Replacing ${item.label}…`);
+      try {
+        const uniqueId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const uploaded = await uploadMediaFile(file, `${item.key}-${uniqueId}`);
+        const value = {
+          ...current,
+          ...uploaded,
+          ...(item.type === "added-media"
+            ? { previousMedia: { url: current.url, mediaType: current.mediaType } }
+            : {}),
+        };
+        await saveContent(item.key, value);
+        contentRecords.set(item.key, value);
+        if (item.type === "added-media") item.value = value;
+        setMessage(editorMessage, `${item.label} now uses the new file. The previous storage file was kept.`, "success");
+        renderFields();
+      } catch (error) {
+        showError(error);
+      } finally {
+        replaceButton.disabled = false;
+      }
+    });
+    card.append(fileLabel, fileInput, replaceButton);
+
+    const restoreButton = document.createElement("button");
+    restoreButton.type = "button";
+    restoreButton.className = "btn btn-secondary cms-save-button";
+    const restoreOriginal = item.type === "media";
+    restoreButton.textContent = restoreOriginal ? "Restore original image/video" : "Restore previous upload";
+    restoreButton.disabled = restoreOriginal
+      ? current.url === item.value.url && current.mediaType === item.value.mediaType && current.alt === item.value.alt
+      : !current.previousMedia?.url;
+    restoreButton.addEventListener("click", async () => {
+      if (restoreButton.disabled) return;
+      const prompt = restoreOriginal
+        ? `Restore ${item.label} to its original image/video?`
+        : `Restore ${item.label} to the previous uploaded file?`;
+      if (!window.confirm(prompt)) return;
+      restoreButton.disabled = true;
+      setMessage(editorMessage, `Restoring ${item.label}…`);
+      try {
+        const value = restoreOriginal
+          ? item.value
+          : { ...current, ...current.previousMedia, previousMedia: { url: current.url, mediaType: current.mediaType } };
+        await saveContent(item.key, value);
+        contentRecords.set(item.key, value);
+        if (!restoreOriginal) item.value = value;
+        setMessage(editorMessage, `${item.label} was restored to its ${restoreOriginal ? "original media" : "previous upload"}.`, "success");
+        renderFields();
+      } catch (error) {
+        showError(error);
+        restoreButton.disabled = false;
+      }
+    });
+    card.append(restoreButton);
   }
 
   function validateMediaFile(file) {
@@ -394,7 +479,8 @@
     const mediaType = file.type.startsWith("video/") ? "video" : "image";
     const filename = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
     const safeKey = key.replace(/[^a-zA-Z0-9._-]/g, "-");
-    const objectPath = `site-content/${safeKey}/${Date.now()}-${filename}`;
+    const uniqueId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const objectPath = `site-content/${safeKey}/${uniqueId}-${filename}`;
     const path = objectPath.split("/").map(encodeURIComponent).join("/");
     await request(`/storage/v1/object/${config.mediaBucket}/${path}`, {
       method: "POST",
@@ -514,6 +600,40 @@
       showError(error);
     } finally {
       submit.disabled = false;
+    }
+  });
+  restoreOriginalMediaButton.addEventListener("click", async () => {
+    const entries = catalog
+      .filter((item) => item.type === "media")
+      .filter((item) => {
+        const current = contentRecords.get(item.key);
+        return current && (
+          current.url !== item.value.url ||
+          current.mediaType !== item.value.mediaType ||
+          current.alt !== item.value.alt
+        );
+      })
+      .map((item) => ({ key: item.key, value: item.value }));
+
+    if (!entries.length) {
+      setMessage(editorMessage, "All built-in images and videos are already original. Newly added media is unchanged.", "info");
+      return;
+    }
+    if (!window.confirm(`Restore ${entries.length} replaced built-in image/video item(s) to their original files across the website? Newly added media will be kept.`)) {
+      return;
+    }
+
+    restoreOriginalMediaButton.disabled = true;
+    setMessage(editorMessage, `Restoring ${entries.length} original image/video item(s)…`);
+    try {
+      await saveContentEntries(entries);
+      entries.forEach((entry) => contentRecords.set(entry.key, entry.value));
+      setMessage(editorMessage, `Restored ${entries.length} original image/video item(s) across the website. Newly added media was kept.`, "success");
+      renderFields();
+    } catch (error) {
+      showError(error);
+    } finally {
+      restoreOriginalMediaButton.disabled = false;
     }
   });
   document.querySelector("#cms-logout").addEventListener("click", async () => {
