@@ -38,7 +38,6 @@
             <p id="cms-content-count" class="admin-muted">Loading editable content…</p>
           </div>
           <div class="admin-toolbar-actions">
-            <button id="cms-restore-original-media" class="btn btn-secondary" type="button" title="Reset replaced built-in media across all pages. Newly added media will be kept.">Restore original images site-wide</button>
             <button id="cms-logout" class="btn btn-secondary" type="button">Sign out</button>
           </div>
         </div>
@@ -48,7 +47,8 @@
           <button id="cms-contact-toggle" class="btn btn-secondary" type="button">Update contact information</button>
         </div>
         <form id="cms-add-media-form" class="cms-add-media-form" hidden>
-          <h3>Add media to a page</h3>
+          <h3 id="cms-add-media-heading">Add media to a page</h3>
+          <p id="cms-add-media-help" class="admin-muted"></p>
           <label class="cms-input-label" for="cms-add-media-page">Choose page</label>
           <select id="cms-add-media-page" class="cms-text-input" required>
             <option value="">Select a page</option>
@@ -60,13 +60,15 @@
             <option value="contact.html">Contact</option>
             <option value="booking.html">Booking</option>
           </select>
-          <label class="cms-input-label" for="cms-add-media-file">Image or video file</label>
+          <label id="cms-add-media-file-label" class="cms-input-label" for="cms-add-media-file">Image or video file</label>
           <input id="cms-add-media-file" class="cms-file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" required />
           <label class="cms-input-label" for="cms-add-media-title">Title</label>
           <input id="cms-add-media-title" class="cms-text-input" type="text" maxlength="120" required />
           <label class="cms-input-label" for="cms-add-media-description">Image or video description</label>
           <textarea id="cms-add-media-description" class="cms-text-input" rows="3" maxlength="500" required></textarea>
-          <button class="btn btn-primary cms-save-button" type="submit">Upload and add</button>
+          <label class="cms-input-label" for="cms-add-media-link">Click-through link (optional)</label>
+          <input id="cms-add-media-link" class="cms-text-input cms-url-input" type="url" inputmode="url" placeholder="https://example.com" />
+          <button id="cms-add-media-submit" class="btn btn-primary cms-save-button" type="submit">Upload and add</button>
         </form>
         <p id="cms-editor-message" class="form-message" role="status" aria-live="polite"></p>
         <div id="cms-editor-error" class="admin-error" role="alert" hidden></div>

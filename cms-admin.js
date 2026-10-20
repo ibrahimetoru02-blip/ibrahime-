@@ -17,12 +17,17 @@
   const pageButtons = document.querySelector("#cms-page-buttons");
   const addMediaToggle = document.querySelector("#cms-add-media-toggle");
   const contactToggle = document.querySelector("#cms-contact-toggle");
-  const restoreOriginalMediaButton = document.querySelector("#cms-restore-original-media");
   const addMediaForm = document.querySelector("#cms-add-media-form");
   const addMediaPage = document.querySelector("#cms-add-media-page");
+  const addMediaPageLabel = document.querySelector('label[for="cms-add-media-page"]');
   const addMediaFile = document.querySelector("#cms-add-media-file");
   const addMediaTitle = document.querySelector("#cms-add-media-title");
   const addMediaDescription = document.querySelector("#cms-add-media-description");
+  const addMediaLink = document.querySelector("#cms-add-media-link");
+  const addMediaHeading = document.querySelector("#cms-add-media-heading");
+  const addMediaHelp = document.querySelector("#cms-add-media-help");
+  const addMediaFileLabel = document.querySelector("#cms-add-media-file-label");
+  const addMediaSubmit = document.querySelector("#cms-add-media-submit");
   const contentCount = document.querySelector("#cms-content-count");
   const fieldsContainer = document.querySelector("#cms-fields");
   const editorMessage = document.querySelector("#cms-editor-message");
@@ -211,18 +216,43 @@
   function renderFields() {
     fieldsContainer.replaceChildren();
     const filtered = catalog.filter((item) => item.page === activePage);
+    const featuredThumbnail = filtered.find((item) => item.key === "gallery.projects.thumbnail");
+    const featuredThumbnailLink = filtered.find((item) => item.key === "gallery.projects.link");
     pageButtons.querySelectorAll(".cms-page-button").forEach((button, index) => {
       const [file] = [...PAGES, [GLOBAL_PAGE, "Contact & footer"]][index];
       button.setAttribute("aria-pressed", String(file === activePage));
     });
     contactToggle.setAttribute("aria-pressed", String(activePage === GLOBAL_PAGE));
-    addMediaToggle.hidden = activePage === GLOBAL_PAGE;
+    const addingProject = activePage === "gallery.html";
+    addMediaToggle.hidden = activePage === GLOBAL_PAGE || addingProject;
+    if (addingProject) {
+      addMediaPage.value = "gallery.html";
+      addMediaPage.hidden = true;
+      addMediaPageLabel.hidden = true;
+      addMediaForm.hidden = false;
+    } else {
+      addMediaPage.hidden = false;
+      addMediaPageLabel.hidden = false;
+      addMediaForm.hidden = activePage === GLOBAL_PAGE || addMediaToggle.getAttribute("aria-expanded") !== "true";
+      editor.insertBefore(addMediaForm, editorMessage);
+    }
+    addMediaToggle.textContent = addingProject ? "Add another project" : "Add image or video";
+    addMediaHeading.textContent = addingProject ? "Add another project" : "Add media to a page";
+    addMediaHelp.textContent = addingProject
+      ? "Each upload adds a separate project card with its own description, replace, restore, delete, and click-through link controls. Repeat to add as many projects as your storage allows."
+      : "Upload media to the selected page. You can manage it from its editor card after upload.";
+    addMediaFileLabel.textContent = addingProject ? "Project thumbnail or video" : "Image or video file";
+    addMediaSubmit.textContent = addingProject ? "Upload and add project" : "Upload and add";
     if (contentCount) {
       contentCount.textContent = `${filtered.length} editable item${filtered.length === 1 ? "" : "s"}`;
     }
     filtered.forEach((item) => {
+      if (item === featuredThumbnailLink && featuredThumbnail) return;
       const card = document.createElement("article");
       card.className = "cms-field-card";
+      if (item.type === "media" || item.type === "added-media") {
+        card.classList.add("cms-media-field-card");
+      }
       const title = document.createElement("h3");
       title.textContent = item.label;
       const pageName = document.createElement("p");
@@ -236,11 +266,20 @@
       } else {
         renderTextField(card, item);
       }
+      if (item === featuredThumbnail && featuredThumbnailLink) {
+        renderTextField(card, featuredThumbnailLink, true);
+      }
       fieldsContainer.append(card);
     });
+    if (addingProject) {
+      addMediaForm.classList.add("cms-add-project-card");
+      fieldsContainer.append(addMediaForm);
+    } else {
+      addMediaForm.classList.remove("cms-add-project-card");
+    }
   }
 
-  function renderTextField(card, item) {
+  function renderTextField(card, item, includeLabel = false) {
     const control = document.createElement(item.type === "link" ? "input" : "textarea");
     control.className = item.type === "link" ? "cms-text-input cms-url-input" : "cms-text-input";
     if (item.type === "link") {
@@ -251,6 +290,14 @@
     const saved = contentRecords.get(item.key);
     control.value = typeof saved === "string" ? saved : (saved?.value ?? item.value);
     control.setAttribute("aria-label", item.label);
+    if (includeLabel) {
+      control.id = `cms-field-${item.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+      const label = document.createElement("label");
+      label.className = "cms-input-label";
+      label.htmlFor = control.id;
+      label.textContent = item.label;
+      card.append(label);
+    }
     const save = document.createElement("button");
     save.type = "button";
     save.className = "btn btn-primary cms-save-button";
@@ -363,13 +410,18 @@
     descriptionInput.className = "cms-text-input";
     descriptionInput.value = current.description || "";
     descriptionInput.setAttribute("aria-label", `${item.label} description`);
+    const descriptionLabel = document.createElement("label");
+    descriptionLabel.className = "cms-input-label";
+    descriptionLabel.textContent = "Image description / video label";
+    descriptionLabel.htmlFor = `cms-description-${item.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    descriptionInput.id = descriptionLabel.htmlFor;
     const save = document.createElement("button");
     save.type = "button";
     save.className = "btn btn-primary cms-save-button";
-    save.textContent = "Save title and description";
+    save.textContent = "Save description";
     save.addEventListener("click", async () => {
-      if (!titleInput.value.trim() || !descriptionInput.value.trim()) {
-        setMessage(editorMessage, "Enter a title and description before saving.", "error");
+      if (!descriptionInput.value.trim()) {
+        setMessage(editorMessage, "Enter a description before saving.", "error");
         return;
       }
       save.disabled = true;
@@ -377,7 +429,7 @@
       try {
         const value = {
           ...current,
-          title: titleInput.value.trim(),
+          title: titleInput.value.trim() || current.title || "Studio project",
           description: descriptionInput.value.trim(),
           alt: descriptionInput.value.trim(),
         };
@@ -398,11 +450,53 @@
     const titleLabel = document.createElement("label");
     titleLabel.className = "cms-input-label";
     titleLabel.textContent = "Title";
-    const descriptionLabel = document.createElement("label");
-    descriptionLabel.className = "cms-input-label";
-    descriptionLabel.textContent = "Image or video description";
-    card.append(preview, titleLabel, titleInput, descriptionLabel, descriptionInput, save);
+    titleLabel.htmlFor = titleInput.id = `cms-title-${item.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    card.append(preview, titleLabel, titleInput, descriptionLabel);
+    card.append(descriptionInput, save);
     renderMediaReplacementControls(card, item, current);
+    renderAddedMediaLinkField(card, item, current);
+  }
+
+  function renderAddedMediaLinkField(card, item, current) {
+    const label = document.createElement("label");
+    label.className = "cms-input-label";
+    label.textContent = "Featured thumbnail click-through link";
+    label.htmlFor = `cms-link-${item.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    const input = document.createElement("input");
+    input.type = "url";
+    input.inputMode = "url";
+    input.placeholder = "https://example.com";
+    input.className = "cms-text-input cms-url-input";
+    input.value = current.link || "";
+    input.id = label.htmlFor;
+    input.setAttribute("aria-label", label.textContent);
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "btn btn-primary cms-save-button";
+    save.textContent = "Save link";
+    save.addEventListener("click", async () => {
+      const link = input.value.trim();
+      if (link && !isSecureWebLink(link)) {
+        setMessage(editorMessage, "Use a valid HTTPS link.", "error");
+        return;
+      }
+      save.disabled = true;
+      setMessage(editorMessage, `Saving the link for ${item.label}…`);
+      try {
+        const value = { ...(contentRecords.get(item.key) || current), link };
+        await saveContent(item.key, value);
+        contentRecords.set(item.key, value);
+        item.value = value;
+        markControlsSaved(input);
+        setMessage(editorMessage, `${item.label} link saved.`, "success");
+        renderFields();
+      } catch (error) {
+        showError(error);
+      } finally {
+        save.disabled = false;
+      }
+    });
+    card.append(label, input, save);
   }
 
   function renderMediaReplacementControls(card, item, current) {
@@ -465,26 +559,30 @@
     restoreButton.type = "button";
     restoreButton.className = "btn btn-secondary cms-save-button";
     const restoreOriginal = item.type === "media";
-    restoreButton.textContent = restoreOriginal ? "Restore original image/video" : "Restore previous upload";
+    const addedOriginal = current.originalMedia || current.previousMedia;
+    restoreButton.textContent = "Restore original image/video";
     restoreButton.disabled = restoreOriginal
       ? !current.hidden && current.url === item.value.url && current.mediaType === item.value.mediaType && current.alt === item.value.alt
-      : !current.previousMedia?.url;
+      : !addedOriginal?.url || (current.url === addedOriginal.url && current.mediaType === addedOriginal.mediaType);
     restoreButton.addEventListener("click", async () => {
       if (restoreButton.disabled) return;
-      const prompt = restoreOriginal
-        ? `Restore ${item.label} to its original image/video?`
-        : `Restore ${item.label} to the previous uploaded file?`;
+      const prompt = `Restore ${item.label} to its original image/video?`;
       if (!window.confirm(prompt)) return;
       restoreButton.disabled = true;
       setMessage(editorMessage, `Restoring ${item.label}…`);
       try {
         const value = restoreOriginal
           ? item.value
-          : { ...current, ...current.previousMedia, previousMedia: { url: current.url, mediaType: current.mediaType } };
+          : {
+            ...current,
+            ...addedOriginal,
+            originalMedia: current.originalMedia || addedOriginal,
+            previousMedia: { url: current.url, mediaType: current.mediaType },
+          };
         await saveContent(item.key, value);
         contentRecords.set(item.key, value);
         if (!restoreOriginal) item.value = value;
-        setMessage(editorMessage, `${item.label} was restored to its ${restoreOriginal ? "original media" : "previous upload"}.`, "success");
+        setMessage(editorMessage, `${item.label} was restored to its original media.`, "success");
         renderFields();
       } catch (error) {
         showError(error);
@@ -531,6 +629,14 @@
       return "Choose a JPG, PNG, WebP, GIF, MP4, or WebM file.";
     }
     return "";
+  }
+
+  function isSecureWebLink(value) {
+    try {
+      return new URL(value).protocol === "https:";
+    } catch {
+      return false;
+    }
   }
 
   async function uploadMediaFile(file, key) {
@@ -613,9 +719,20 @@
     addMediaToggle.setAttribute("aria-expanded", String(!addMediaForm.hidden));
     if (!addMediaForm.hidden) {
       addMediaPage.value = PAGES.some(([file]) => file === activePage) ? activePage : "";
+      updateAddMediaLabels();
       addMediaPage.focus();
     }
   });
+  const updateAddMediaLabels = () => {
+    const addingProject = addMediaPage.value === "gallery.html";
+    addMediaHeading.textContent = addingProject ? "Add another project" : "Add media to a page";
+    addMediaHelp.textContent = addingProject
+      ? "Each upload adds a separate project card with its own description, replace, restore, delete, and click-through link controls. Repeat to add as many projects as your storage allows."
+      : "Upload media to the selected page. You can manage it from its editor card after upload.";
+    addMediaFileLabel.textContent = addingProject ? "Project thumbnail or video" : "Image or video file";
+    addMediaSubmit.textContent = addingProject ? "Upload and add project" : "Upload and add";
+  };
+  addMediaPage.addEventListener("change", updateAddMediaLabels);
   contactToggle.addEventListener("click", () => {
     if (unsavedControls.size && !window.confirm("You have unsaved editor changes. Discard them and open contact information?")) return;
     unsavedControls.clear();
@@ -634,6 +751,11 @@
       setMessage(editorMessage, fileError, "error");
       return;
     }
+    const link = addMediaLink.value.trim();
+    if (link && !isSecureWebLink(link)) {
+      setMessage(editorMessage, "Use a valid HTTPS link.", "error");
+      return;
+    }
     const submit = addMediaForm.querySelector('button[type="submit"]');
     submit.disabled = true;
     setMessage(editorMessage, `Uploading ${addMediaTitle.value.trim()}…`);
@@ -643,14 +765,18 @@
       const uploaded = await uploadMediaFile(file, key);
       const value = {
         page: addMediaPage.value,
+        section: addMediaPage.value === "gallery.html" ? "more-projects" : undefined,
+        createdAt: new Date().toISOString(),
         title: addMediaTitle.value.trim(),
         description: addMediaDescription.value.trim(),
         alt: addMediaDescription.value.trim(),
+        link,
         ...uploaded,
+        originalMedia: { url: uploaded.url, mediaType: uploaded.mediaType },
       };
       await saveContent(key, value);
       contentRecords.set(key, value);
-      markControlsSaved(addMediaPage, addMediaFile, addMediaTitle, addMediaDescription);
+      markControlsSaved(addMediaPage, addMediaFile, addMediaTitle, addMediaDescription, addMediaLink);
       catalog.push({
         key,
         label: value.title,
@@ -669,41 +795,6 @@
       showError(error);
     } finally {
       submit.disabled = false;
-    }
-  });
-  restoreOriginalMediaButton.addEventListener("click", async () => {
-    const entries = catalog
-      .filter((item) => item.type === "media")
-      .filter((item) => {
-        const current = contentRecords.get(item.key);
-        return current && (
-          current.hidden ||
-          current.url !== item.value.url ||
-          current.mediaType !== item.value.mediaType ||
-          current.alt !== item.value.alt
-        );
-      })
-      .map((item) => ({ key: item.key, value: item.value }));
-
-    if (!entries.length) {
-      setMessage(editorMessage, "All built-in images and videos are already original. Newly added media is unchanged.", "info");
-      return;
-    }
-    if (!window.confirm(`Restore ${entries.length} replaced built-in image/video item(s) to their original files across the website? Newly added media will be kept.`)) {
-      return;
-    }
-
-    restoreOriginalMediaButton.disabled = true;
-    setMessage(editorMessage, `Restoring ${entries.length} original image/video item(s)…`);
-    try {
-      await saveContentEntries(entries);
-      entries.forEach((entry) => contentRecords.set(entry.key, entry.value));
-      setMessage(editorMessage, `Restored ${entries.length} original image/video item(s) across the website. Newly added media was kept.`, "success");
-      renderFields();
-    } catch (error) {
-      showError(error);
-    } finally {
-      restoreOriginalMediaButton.disabled = false;
     }
   });
   document.querySelector("#cms-logout").addEventListener("click", async () => {
