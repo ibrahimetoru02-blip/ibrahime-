@@ -1377,3 +1377,38 @@ button:disabled {
   border-radius: 0.7rem;
   background: rgba(0, 0, 0, 0.25);
 }
+
+.other-project-link {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.other-project-link img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 210 / 297;
+  object-fit: contain;
+  border-radius: 0.7rem;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.other-project-caption {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 1rem;
+}
+
+.other-project-caption span {
+  color: var(--muted);
+}
+
+.other-project-caption .other-project-cta {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.other-project-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}

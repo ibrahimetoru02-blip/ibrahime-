@@ -254,7 +254,7 @@
     const save = document.createElement("button");
     save.type = "button";
     save.className = "btn btn-primary cms-save-button";
-    save.textContent = "Save text";
+    save.textContent = item.type === "link" ? "Save link" : "Save text";
     save.addEventListener("click", async () => {
       save.disabled = true;
       setMessage(editorMessage, `Saving ${item.label}…`);
