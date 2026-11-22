@@ -195,12 +195,28 @@
     });
   }
 
+  const getEditablePages = () => PAGES.filter(([file]) =>
+    catalog.some((item) => item.page === file && (item.type === "media" || item.type === "added-media")),
+  );
+
   function renderPageButtons() {
     pageButtons.replaceChildren();
-    [...PAGES, [GLOBAL_PAGE, "Contact & footer"]].forEach(([file, label]) => {
+    const editablePages = getEditablePages();
+    const contactFields = catalog.some((item) =>
+      item.page === GLOBAL_PAGE && ["contact.email", "contact.email.secondary", "contact.phone", "contact.phone.secondary"].includes(item.key),
+    );
+    const sections = [
+      ...editablePages,
+      ...(contactFields ? [[GLOBAL_PAGE, "Contact & footer"]] : []),
+    ];
+    if (!sections.some(([file]) => file === activePage)) {
+      activePage = sections[0]?.[0] || "";
+    }
+    sections.forEach(([file, label]) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "cms-page-button";
+      button.dataset.pageFile = file;
       button.textContent = label;
       button.setAttribute("aria-pressed", String(file === activePage));
       button.addEventListener("click", () => {
@@ -215,12 +231,14 @@
 
   function renderFields() {
     fieldsContainer.replaceChildren();
-    const filtered = catalog.filter((item) => item.page === activePage);
+    const pageItems = catalog.filter((item) => item.page === activePage);
+    const filtered = pageItems.filter((item) => activePage === GLOBAL_PAGE
+      ? ["contact.email", "contact.email.secondary", "contact.phone", "contact.phone.secondary"].includes(item.key)
+      : item.type === "media" || item.type === "added-media" || item.key === "gallery.projects.link");
     const featuredThumbnail = filtered.find((item) => item.key === "gallery.projects.thumbnail");
     const featuredThumbnailLink = filtered.find((item) => item.key === "gallery.projects.link");
-    pageButtons.querySelectorAll(".cms-page-button").forEach((button, index) => {
-      const [file] = [...PAGES, [GLOBAL_PAGE, "Contact & footer"]][index];
-      button.setAttribute("aria-pressed", String(file === activePage));
+    pageButtons.querySelectorAll(".cms-page-button").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.pageFile === activePage));
     });
     contactToggle.setAttribute("aria-pressed", String(activePage === GLOBAL_PAGE));
     const addingProject = activePage === "gallery.html";
@@ -244,7 +262,17 @@
     addMediaFileLabel.textContent = addingProject ? "Project thumbnail or video" : "Image or video file";
     addMediaSubmit.textContent = addingProject ? "Upload and add project" : "Upload and add";
     if (contentCount) {
-      contentCount.textContent = `${filtered.length} editable item${filtered.length === 1 ? "" : "s"}`;
+      contentCount.textContent = activePage === GLOBAL_PAGE
+        ? `${filtered.length} contact field${filtered.length === 1 ? "" : "s"}`
+        : `${filtered.length} image or video item${filtered.length === 1 ? "" : "s"}`;
+    }
+    if (!filtered.length) {
+      const emptyState = document.createElement("p");
+      emptyState.className = "admin-muted";
+      emptyState.textContent = activePage === GLOBAL_PAGE
+        ? "No contact information is available to edit."
+        : "No images or videos on this page yet. Use Add image or video to add media.";
+      fieldsContainer.append(emptyState);
     }
     filtered.forEach((item) => {
       if (item === featuredThumbnailLink && featuredThumbnail) return;
@@ -311,24 +339,29 @@
           throw new Error("Use an HTTPS, mailto:, or tel: link.");
         }
         const entries = [{ key: item.key, value }];
-        if (item.key === "contact.email") {
+        if (item.key === "contact.email" || item.key === "contact.email.secondary") {
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
             throw new Error("Enter a valid contact email address.");
           }
-          entries.push({ key: "contact.email.href", value: `mailto:${value}` });
-        } else if (item.key === "contact.phone") {
+          const linkKey = item.key === "contact.email" ? "contact.email.href" : "contact.email.secondary.href";
+          entries.push({ key: linkKey, value: `mailto:${value}` });
+        } else if (item.key === "contact.phone" || item.key === "contact.phone.secondary") {
           let phoneDigits = value.replace(/\D/g, "");
           if (phoneDigits.startsWith("0")) phoneDigits = `256${phoneDigits.slice(1)}`;
           if (phoneDigits.length < 8 || phoneDigits.length > 15) {
             throw new Error("Enter a valid phone number with its country code, or a local number beginning with 0.");
           }
-          entries.push({ key: "contact.whatsapp.href", value: `https://wa.me/${phoneDigits}` });
+          const linkKey = item.key === "contact.phone"
+            ? "contact.whatsapp.href"
+            : "contact.whatsapp.secondary.href";
+          entries.push({ key: linkKey, value: `https://wa.me/${phoneDigits}` });
         }
         if (entries.length > 1) await saveContentEntries(entries);
         else await saveContent(item.key, value);
         entries.forEach((entry) => contentRecords.set(entry.key, entry.value));
         markControlsSaved(control);
-        const linkedMessage = item.key === "contact.email" || item.key === "contact.phone"
+        const linkedMessage = item.key === "contact.email" || item.key === "contact.email.secondary" ||
+          item.key === "contact.phone" || item.key === "contact.phone.secondary"
           ? " Its click-to-contact link was updated automatically."
           : "";
         setMessage(editorMessage, `${item.label} saved.${linkedMessage} The live site will use the updated text.`, "success");
@@ -611,6 +644,7 @@
           await deleteContent(item.key);
           contentRecords.delete(item.key);
           catalog = catalog.filter((entry) => entry.key !== item.key);
+          renderPageButtons();
         }
         setMessage(editorMessage, `${item.label} was removed from ${item.pageLabel}.`, "success");
         renderFields();
@@ -786,6 +820,7 @@
         value,
       });
       activePage = value.page;
+      renderPageButtons();
       addMediaForm.reset();
       addMediaForm.hidden = true;
       addMediaToggle.setAttribute("aria-expanded", "false");

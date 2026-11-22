@@ -199,6 +199,28 @@
     });
   };
 
+  const normalizeLegacyContactValue = (key, value) => {
+    const previousPhoneDigits = new Set(["256788676760", "2567781688686"]);
+    if (key === "contact.phone") {
+      const phone = typeof value === "string" ? value : value?.value;
+      if (typeof phone === "string" && previousPhoneDigits.has(phone.replace(/\D/g, ""))) {
+        const correctedPhone = "+256 (771) 68-8686";
+        return typeof value === "string" ? correctedPhone : { ...value, value: correctedPhone };
+      }
+    }
+    if (key === "contact.whatsapp.href" && typeof value === "string") {
+      try {
+        const url = new URL(value);
+        if (url.hostname === "wa.me" && previousPhoneDigits.has(url.pathname.replace(/\D/g, ""))) {
+          return "https://wa.me/256771688686";
+        }
+      } catch (error) {
+        return value;
+      }
+    }
+    return value;
+  };
+
   const loadSiteContent = async () => {
     const response = await fetch(
       `${config.url.replace(/\/$/, "")}/rest/v1/site_content?select=key,value`,
@@ -211,7 +233,7 @@
     const content = new Map(records.map((record) => [record.key, record.value]));
 
     document.querySelectorAll("[data-cms-key]").forEach((element) => {
-      const value = content.get(element.dataset.cmsKey);
+      const value = normalizeLegacyContactValue(element.dataset.cmsKey, content.get(element.dataset.cmsKey));
       if (typeof value === "string") {
         element.textContent = value;
       } else if (value && typeof value.value === "string") {
@@ -227,7 +249,7 @@
     });
 
     document.querySelectorAll("[data-cms-href]").forEach((element) => {
-      const value = content.get(element.dataset.cmsHref);
+      const value = normalizeLegacyContactValue(element.dataset.cmsHref, content.get(element.dataset.cmsHref));
       if (typeof value === "string" && ["https:", "mailto:", "tel:"].some((protocol) => value.startsWith(protocol))) {
         element.href = value;
       }
